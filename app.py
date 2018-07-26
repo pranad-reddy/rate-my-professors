@@ -1,8 +1,9 @@
 from selenium import webdriver
 from math import ceil
 import time
-
+from teacher import Teacher
 driver = webdriver.Chrome('./chromedriver')
+
 
 def load_pages():
     url = "http://www.ratemyprofessors.com/search.jsp?queryBy=schoolId&schoolName=University+of+California+Berkeley&schoolID=1072&queryoption=TEACHER"
@@ -47,30 +48,36 @@ def get_url(id):
     return "http://www.ratemyprofessors.com/ShowRatings.jsp?tid=" + str(id)
 
 def write_teacher_ratings_to_file(teacher_ids):
+    teacher_objs = []
+
     # for id in teacher_ids:
     id = teacher_ids[0]
     url = get_url(id)
     driver.get(url)
-
+    comments = []
     elements = driver.find_elements_by_tag_name("tr")
-    ratings = []
     for el in elements:
         try:
             assert(el.find_element_by_tag_name("td").get_attribute("class") == "rating")
             comment = el.find_elements_by_tag_name("td")[2].find_element_by_tag_name("p").text
-            ratings.append(comment)
-        except:
-            pass
-    print(len(ratings))
-    for e in ratings:
-        print(e+"\n")
-        # for el in elements:
-        #     el_tag = el.find_element_by_tag_name("a")
-        #     remove_button_el = el_tag.find_element_by_class_name("remove-this-button")
-        #     id = remove_button_el.get_attribute("data-id")
-        #     id_lst.append(id)
-        # return id_lst
+            comments.append(comment)
+        except Exception as e:
+            continue
+    last_name = driver.find_element_by_class_name("plname").text
+    first_name = driver.find_element_by_class_name("pfname").text[:1]
+    name = last_name + " " + first_name
+    rating = driver.find_element_by_css_selector(".breakdown-container.quality").find_element_by_class_name("grade").text
+    difficulty = driver.find_element_by_css_selector(".breakdown-section.difficulty").find_element_by_class_name("grade").text
+    teacher = Teacher(name=name, rating=rating, difficulty=difficulty, comments=comments)
+    teacher_objs.append(teacher)
+    # print("Name: ", teacher_objs[0].name)
+    # print("Rating: ", teacher_objs[0].rating)
+    # print("Difficulty: ", teacher_objs[0].difficulty)
+    # print("Comments: ", len(teacher_objs[0].comments))
 
+    #TODO handle 0 ratings/no difficulty/rating issue
+    #TODO get all teacher objects
+    #TODO Write to file (pickled)
 
 
 if __name__ == '__main__':
@@ -80,5 +87,8 @@ if __name__ == '__main__':
     teacher_ids = get_teacher_ids_from_file()
     write_teacher_ratings_to_file(teacher_ids)
     driver.quit()
-#TODO wrap everything in try
+    # TODO
+
+
+#TODO wrap everything in try, put driver.quit in all to save resources
 #TODO dont use xpath
