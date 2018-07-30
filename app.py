@@ -50,12 +50,12 @@ def get_professor_ids_from_file():
         return [line.rstrip('\n') for line in file]
 
 
-def write_professor_ratings_to_file(professor_ids):
+def extract_professor_ratings(professor_ids):
     t = 0
     professor_objs, failed_extractions = [], []
     for id in professor_ids:
         t+=1
-        if t == 5:
+        if t == 10:
             break
         driver.get("http://www.ratemyprofessors.com/ShowRatings.jsp?tid=" + str(id))
 
@@ -94,16 +94,7 @@ def write_professor_ratings_to_file(professor_ids):
             continue
 
     print(failed_extractions)
-    with open("pickled_professors.pickle", "wb") as file:
-        for professor in professor_objs:
-            pickle.dump(professor,  file, pickle.HIGHEST_PROTOCOL)
-    obj = []
-    with open("pickled_professors.pickle", "rb") as file:
-        while True:
-            try:
-                obj.append(pickle.load(file))
-            except EOFError:
-                break
+
     # for o in obj:
     #     print()
     #     print("Name: ", o.name)
@@ -114,18 +105,38 @@ def write_professor_ratings_to_file(professor_ids):
     #     print("Difficulty: ", o.difficulty)
     #     print("Tags: ", o.tags)
     #     print("Comments: ", o.comments[:3])
-    return failed_extractions
+    return professor_objs
 
+
+def write_professor_objs_to_file(professor_objs):
+    with open("pickled_professors.pickle", "wb") as file:
+        for professor in professor_objs:
+            pickle.dump(professor,  file, pickle.HIGHEST_PROTOCOL)
+
+
+def get_professor_obs_from_file():
+    professor_objs = []
+    with open("pickled_professors.pickle", "rb") as file:
+        while True:
+            try:
+                professor_objs.append(pickle.load(file))
+            except EOFError:
+                break
+    return professor_objs
 
 if __name__ == '__main__':
-    # load_pages()
-    # professor_ids = get_professor_ids()
-    # write_professor_ids_to_file(professor_ids)
+    load_pages()
+    professor_ids = get_professor_ids()
+    write_professor_ids_to_file(professor_ids)
     professor_ids = get_professor_ids_from_file()
-    failed_extractions = write_professor_ratings_to_file(professor_ids)
+    professor_objs = extract_professor_ratings(professor_ids)
+    write_professor_objs_to_file(professor_objs)
+    professor_objs = get_professor_obs_from_file()
     driver.quit()
 
 
 # ---------
 #TODO wrap everything in try, put driver.quit in all to save resources, add print statements to everything(move into methods)
 #TODO might not be 3 tags,
+#TODO add print statements to measure progress
+#TODO at end remove reading and writing files for some methods and just have them as utility methods
