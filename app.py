@@ -16,6 +16,7 @@ def load_pages():
     pages, profs_loaded = 1, 20
     total_professors = int(driver.find_element_by_class_name("professor-count").text)
     total_pages = ceil(total_professors / 20)
+    print("\nLoading pages\n")
     while profs_loaded < total_professors:
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
         time.sleep(.4)
@@ -24,41 +25,40 @@ def load_pages():
         driver.execute_script("arguments[0].click();", load_more_button)
         pages += 1
         profs_loaded += 20
-        print(str(pages) + "/" + str(total_pages) + " pages loaded: " + str(round(pages/total_pages*100, 1)) + "%")
+        print(str(pages) + "/" + str(total_pages) + " pages loaded: " + str(round(pages / total_pages * 100, 1)) + "%")
         time.sleep(.4)
 
 
 def get_professor_ids():
-    print("\nExtracting professor ids...")
+    print("Extracting professor ids...\n")
     elements = driver.find_elements_by_class_name("remove-this-button")
     return [el.get_attribute("data-id") for el in elements]
 
-    # return [e.find_element_by_tag_name("a").find_element_by_class_name("remove-this-button").get_attribute("data-id")
-    #         for e in driver.find_elements_by_xpath("//*[contains(@id, 'my-professor-')]")]
-
-# print(sum([int(e.find_element_by_tag_name("a").find_element_by_class_name("name").find_element_by_class_name("info").text.split(' ')[0]) for e in driver.find_elements_by_xpath("//*[contains(@id, 'my-professor-')]")]))
 
 def write_professor_ids_to_file(lst):
-    print("\nWriting " + str(len(lst)) + " professor ids to file")
+    print("Writing " + str(len(lst)) + " professor ids to output.txt\n")
     with open('output.txt', 'w') as file:
         for i in lst:
             file.write(i+"\n")
 
 
 def get_professor_ids_from_file():
+    print("Getting professor ids from output.txt\n")
     with open('output.txt', 'r') as file:
         return [line.rstrip('\n') for line in file]
 
 
-def extract_professor_ratings(professor_ids):
+def extract_professor_data(professor_ids):
+    num_profs = len(professor_ids)
+    print("Extracting " + str(num_profs) + " professors' data... (This will take a while)\n")
     t = 0
     professor_objs, failed_extractions = [], []
-    for id in professor_ids:
+    for count, id in enumerate(professor_ids, 1):
+        print(str(count) + "/" + str(num_profs) + " | " + str(round(count / num_profs * 100, 2)) + "%")
         t+=1
         if t == 10:
             break
         driver.get("http://www.ratemyprofessors.com/ShowRatings.jsp?tid=" + str(id))
-
         if "AddRating" in driver.current_url:
             try:
                 name = driver.find_element_by_class_name("name").text
@@ -92,8 +92,9 @@ def extract_professor_ratings(professor_ids):
         except:
             failed_extractions.append(id)
             continue
-
-    print(failed_extractions)
+    if failed_extractions:
+        print("\nIDs of failed professor data extractions:")
+        print(failed_extractions)
 
     # for o in obj:
     #     print()
@@ -109,12 +110,14 @@ def extract_professor_ratings(professor_ids):
 
 
 def write_professor_objs_to_file(professor_objs):
+    print("Writing professor objects to pickled_professors.pickle\n")
     with open("pickled_professors.pickle", "wb") as file:
         for professor in professor_objs:
             pickle.dump(professor,  file, pickle.HIGHEST_PROTOCOL)
 
 
 def get_professor_obs_from_file():
+    print("Getting professor objects to pickled_professors.pickle\n")
     professor_objs = []
     with open("pickled_professors.pickle", "rb") as file:
         while True:
@@ -125,18 +128,15 @@ def get_professor_obs_from_file():
     return professor_objs
 
 if __name__ == '__main__':
-    load_pages()
-    professor_ids = get_professor_ids()
-    write_professor_ids_to_file(professor_ids)
+    # load_pages()
+    # professor_ids = get_professor_ids()
+    # write_professor_ids_to_file(professor_ids)
     professor_ids = get_professor_ids_from_file()
-    professor_objs = extract_professor_ratings(professor_ids)
-    write_professor_objs_to_file(professor_objs)
-    professor_objs = get_professor_obs_from_file()
+    professor_objs = extract_professor_data(professor_ids)
+    # write_professor_objs_to_file(professor_objs)
+    # professor_objs = get_professor_obs_from_file()
     driver.quit()
 
 
-# ---------
-#TODO wrap everything in try, put driver.quit in all to save resources, add print statements to everything(move into methods)
 #TODO might not be 3 tags,
-#TODO add print statements to measure progress
 #TODO at end remove reading and writing files for some methods and just have them as utility methods
