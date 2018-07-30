@@ -1,12 +1,14 @@
 from selenium import webdriver
 from math import ceil
+from professor import Professor
+import pickle
 import time
-from teacher import Teacher
+
 chromeOptions = webdriver.ChromeOptions()
-prefs = {'profile.managed_default_content_settings.images':2, 'disk-cache-size': 4096}
+prefs = {'profile.managed_default_content_settings.images': 2, 'disk-cache-size': 4096}
 chromeOptions.add_experimental_option("prefs", prefs)
 driver = webdriver.Chrome(executable_path='./chromedriver', chrome_options=chromeOptions)
-import time
+
 
 def load_pages():
     url = "http://www.ratemyprofessors.com/search.jsp?queryBy=schoolId&schoolName=University+of+California+Berkeley&schoolID=1072&queryoption=TEACHER"
@@ -16,89 +18,114 @@ def load_pages():
     total_pages = ceil(total_professors / 20)
     while profs_loaded < total_professors:
         driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
+        time.sleep(.4)
         load_more_button = driver.find_element_by_class_name("progressbtnwrap")
+        time.sleep(.4)
         driver.execute_script("arguments[0].click();", load_more_button)
         pages += 1
         profs_loaded += 20
         print(str(pages) + "/" + str(total_pages) + " pages loaded: " + str(round(pages/total_pages*100, 1)) + "%")
         time.sleep(.4)
 
-def get_teacher_ids():
-    id_lst = []
-    elements = driver.find_elements_by_xpath("//*[contains(@id, 'my-professor-')]")
-    for el in elements:
-        el_tag = el.find_element_by_tag_name("a")
-        remove_button_el = el_tag.find_element_by_class_name("remove-this-button")
-        id = remove_button_el.get_attribute("data-id")
-        id_lst.append(id)
-    return id_lst
+
+def get_professor_ids():
+    print("\nExtracting professor ids...")
+    elements = driver.find_elements_by_class_name("remove-this-button")
+    return [el.get_attribute("data-id") for el in elements]
 
     # return [e.find_element_by_tag_name("a").find_element_by_class_name("remove-this-button").get_attribute("data-id")
     #         for e in driver.find_elements_by_xpath("//*[contains(@id, 'my-professor-')]")]
+
 # print(sum([int(e.find_element_by_tag_name("a").find_element_by_class_name("name").find_element_by_class_name("info").text.split(' ')[0]) for e in driver.find_elements_by_xpath("//*[contains(@id, 'my-professor-')]")]))
 
-def write_teacher_ids_to_file(lst):
+def write_professor_ids_to_file(lst):
+    print("\nWriting " + str(len(lst)) + " professor ids to file")
     with open('output.txt', 'w') as file:
         for i in lst:
             file.write(i+"\n")
 
-def get_teacher_ids_from_file():
+
+def get_professor_ids_from_file():
     with open('output.txt', 'r') as file:
         return [line.rstrip('\n') for line in file]
 
 
-def get_url(id):
-    return "http://www.ratemyprofessors.com/ShowRatings.jsp?tid=" + str(id)
+def write_professor_ratings_to_file(professor_ids):
+    t = 0
+    professor_objs, failed_extractions = [], []
+    for id in professor_ids:
+        t+=1
+        if t == 5:
+            break
+        driver.get("http://www.ratemyprofessors.com/ShowRatings.jsp?tid=" + str(id))
 
-def write_teacher_ratings_to_file(teacher_ids):
-    teacher_objs = []
-
-# for id in teacher_ids:
-    id = 2388219
-    url = get_url(id)
-    print(time.time())
-    driver.get(url)
-    print(time.time())
-    if "AddRating" in driver.current_url:
-        return
-    comments = []
-    elements = driver.find_elements_by_tag_name("tr")
-    for el in elements:
-        try:
-            comment = el.find_elements_by_tag_name("td")[2].find_element_by_tag_name("p").text
-            comments.append(comment)
-        except Exception as e:
-            print(e)
+        if "AddRating" in driver.current_url:
+            try:
+                name = driver.find_element_by_class_name("name").text
+                name_id = (name.split(" ")[1] + " " + name[0]).upper()
+                professor = Professor(name=name, name_id=name_id, id=id, num_ratings=0)
+                professor_objs.append(professor)
+            except:
+                failed_extractions.append(id)
             continue
 
-    last_name = driver.find_element_by_class_name("plname").text
-    first_name = driver.find_element_by_class_name("pfname").text
-    name_id = (last_name + " " + first_name[:1]).upper()
-    rating = driver.find_element_by_css_selector(".breakdown-container.quality").find_element_by_class_name("grade").text
-    difficulty = driver.find_element_by_css_selector(".breakdown-section.difficulty").find_element_by_class_name("grade").text
-    teacher = Teacher(name=first_name + " " + last_name, name_id=name_id, id=id, rating=rating, difficulty=difficulty, comments=comments)
-    teacher_objs.append(teacher)
+        comments = []
+        elements = driver.find_elements_by_tag_name("tr")
+        for el in elements:
+            try:
+                comments.append(el.find_element_by_tag_name("p").text)
+            except:
+                continue
+        try:
+            last_name = driver.find_element_by_class_name("plname").text
+            first_name = driver.find_element_by_class_name("pfname").text
+            name_id = (last_name + " " + first_name[0]).upper()
+            num_ratings = driver.find_element_by_css_selector("div.table-toggle.rating-count.active").text.split(" ")[0]
+            rating = driver.find_element_by_css_selector(".breakdown-container.quality").find_element_by_class_name(
+                "grade").text
+            difficulty = driver.find_element_by_css_selector(
+                ".breakdown-section.difficulty").find_element_by_class_name("grade").text
+            tags = [e.text.split(" (")[0] for e in driver.find_elements_by_class_name('tag-box-choosetags')[0:3]]
+            professor = Professor(name=first_name + " " + last_name, name_id=name_id, id=id, num_ratings=num_ratings,
+                                  rating=rating, difficulty=difficulty, tags=tags, comments=comments)
+            professor_objs.append(professor)
+        except:
+            failed_extractions.append(id)
+            continue
 
-    print("Name: ", teacher_objs[0].name)
-    print("Name ID : ", teacher_objs[0].name_id)
-    print("id: ", teacher_objs[0].id)
-    print("Rating: ", teacher_objs[0].rating)
-    print("Difficulty: ", teacher_objs[0].difficulty)
-    print("Comments: ", len(teacher_objs[0].comments))
-
-    #TODO get all teacher objects
-    #TODO Write to file (pickled)
+    print(failed_extractions)
+    with open("pickled_professors.pickle", "wb") as file:
+        for professor in professor_objs:
+            pickle.dump(professor,  file, pickle.HIGHEST_PROTOCOL)
+    obj = []
+    with open("pickled_professors.pickle", "rb") as file:
+        while True:
+            try:
+                obj.append(pickle.load(file))
+            except EOFError:
+                break
+    # for o in obj:
+    #     print()
+    #     print("Name: ", o.name)
+    #     print("Name ID: ", o.name_id)
+    #     print("id: ", o.id)
+    #     print("Num ratings: ", o.num_ratings)
+    #     print("Rating: ", o.rating)
+    #     print("Difficulty: ", o.difficulty)
+    #     print("Tags: ", o.tags)
+    #     print("Comments: ", o.comments[:3])
+    return failed_extractions
 
 
 if __name__ == '__main__':
     # load_pages()
-    # teacher_ids = get_teacher_ids()
-    # write_teacher_ids_to_file(teacher_ids)
-    teacher_ids = get_teacher_ids_from_file()
-    write_teacher_ratings_to_file(teacher_ids)
+    # professor_ids = get_professor_ids()
+    # write_professor_ids_to_file(professor_ids)
+    professor_ids = get_professor_ids_from_file()
+    failed_extractions = write_professor_ratings_to_file(professor_ids)
     driver.quit()
-    # TODO
 
 
-#TODO wrap everything in try, put driver.quit in all to save resources
-#TODO dont use xpath
+# ---------
+#TODO wrap everything in try, put driver.quit in all to save resources, add print statements to everything(move into methods)
+#TODO might not be 3 tags,
